@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hhs_risk"
-version = "0.1.0"
-description = "Python port of the HHS-HCC DIY risk adjustment SAS software"
+version = "0.2.0"
+description = "Python ports of the HHS-HCC DIY and Medicare CMS-HCC (V24/V28 + ESRD + RxHCC) SAS risk-adjustment software"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -15,7 +15,8 @@ dependencies = ["pandas>=1.5"]
 test = ["pytest>=7"]
 
 [tool.setuptools.packages.find]
-include = ["hhs_risk*"]
+include = ["hhs_risk*", "cms_hcc*"]
 
 [tool.setuptools.package-data]
 hhs_risk = ["data/**/*.TXT", "data/**/*.csv"]
+cms_hcc = ["data/**/*.TXT", "data/**/*.csv", "data/**/*.json"]

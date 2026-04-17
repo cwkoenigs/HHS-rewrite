@@ -1,11 +1,19 @@
 # HHS-rewrite
 
-A Python port of the CMS/HHS "Do It Yourself" (DIY) risk adjustment SAS
-software — the algorithm insurers use to translate enrollment, medical
-claims, and pharmacy claims into the HHS-HCC risk score that drives ACA
-risk adjustment transfers.
+Python ports of the two major U.S. risk-adjustment SAS packages:
 
-## Status
+1. **`hhs_risk/`** — the CMS/HHS "Do It Yourself" (DIY) risk adjustment
+   model used for ACA commercial risk adjustment. Ports the full DIY
+   pipeline: enrollment + medical + pharmacy claims in, plan-level PLRS
+   out. See [HHS-HCC DIY details](#hhs-hcc-diy-pipeline) below.
+2. **`cms_hcc/`** — the Medicare CMS-HCC model used for Medicare Advantage
+   (Part C) and Part D payments. Ports V24 and V28 (with blend), ESRD
+   dialysis / transplant / functioning-graft, and an RxHCC scaffold. See
+   [CMS-HCC details](#medicare-cms-hcc).
+
+## HHS-HCC DIY pipeline
+
+### Status
 
 **Benefit years implemented:** BY2022 (reference data shipped).
 
@@ -156,7 +164,76 @@ Fifteen tests cover reference-data parsing, demographic bucketing,
 hierarchy dominance, the CSR adjustment path, and an end-to-end pipeline
 smoke test against a synthetic two-member, three-claim population.
 
+## Medicare CMS-HCC
+
+```python
+from cms_hcc import CMSHCCModel, blend_scores
+from cms_hcc.segment import EnrolleeStatus
+
+v24 = CMSHCCModel("V24")
+v28 = CMSHCCModel("V28")
+
+status = EnrolleeStatus(age=72, sex="F", orec="0", medicaid="none")
+dx = ["E11.9", "I50.22", "I13.10", "N18.4"]
+
+# V24 or V28 standalone:
+score = v24.profile(status, dx)
+print(score.segment, score.risk_score, score.hccs)
+
+# Blended score for a transition payment year:
+blended = blend_scores(v24, v28, status, dx, payment_year=2025)
+print(blended.risk_score, blended.v28_weight)
+```
+
+**Supported model segments** (V24 and V28 share the same set):
+
+| Segment  | Meaning                                        |
+| -------- | ---------------------------------------------- |
+| CFA/CFD  | Community Full-Benefit Dual, Aged / Disabled   |
+| CNA/CND  | Community Non-Dual, Aged / Disabled            |
+| CPA/CPD  | Community Partial-Benefit Dual, Aged / Dis.    |
+| INS      | Institutional (long-term institutional months) |
+| NE       | New Enrollee (no claims history)               |
+| SNPNE    | SNP New Enrollee                               |
+
+**ESRD** (end-stage renal disease) uses a separate scorer:
+
+```python
+from cms_hcc.esrd import ESRDModel, ESRDStatus
+
+esrd = ESRDModel()
+esrd.profile(
+    ESRDStatus(age=70, sex="M", orec="2", phase="dialysis"),
+    diagnoses=["E11.9", "I50.22"],
+)
+```
+
+ESRD phases: `dialysis` (DI / DNE), `transplant` (TRANSPLANT with 1–3-month
+factors), `functioning_graft` (GC / GI / GNE).
+
+**V24/V28 blend weights** (from CMS rulemaking):
+
+| PY   | V24  | V28  |
+| ---- | ---- | ---- |
+| 2024 | 0.67 | 0.33 |
+| 2025 | 0.33 | 0.67 |
+| 2026+| 0.00 | 1.00 |
+
+**Part D RxHCC.** `cms_hcc.rxhcc.RxHCCModel` is wired end-to-end but needs
+CMS-published reference files dropped into `cms_hcc/data/rxhcc/` to
+activate (see the README there for the expected file set). The sandbox
+network policy prevented fetching them directly from cms.gov.
+
+## CMS-HCC reference-data provenance
+
+Files in `cms_hcc/data/v24/`, `cms_hcc/data/v28/`, `cms_hcc/data/esrd/`,
+and `cms_hcc/data/AGESEXV2.TXT` are the CMS-distributed SAS program,
+hierarchy, label, age/sex-edit, and coefficient files — U.S. Government
+works in the public domain, redistributed via the Apache-2.0 yubin-park/
+hccpy project. The algorithm was reimplemented from the CMS-published SAS
+program listings (`V2419P1M.TXT` and `V2823T2M.TXT`).
+
 ## License
 
-MIT. The CMS reference data files in `hhs_risk/data/by2022/` are
-U.S. Government works in the public domain.
+MIT. The CMS reference data files shipped in this repo are U.S. Government
+works in the public domain.
